@@ -59,6 +59,16 @@ let dotShape = dotShapeSelect ? dotShapeSelect.value : 'circle';
 let historyStack = [];
 let maxHistory = 60;
 
+// ── Image Layer system ───────────────────────────────────────────────
+let imageLayers = [];   // [{id, name, src (dataURL), opacity, visible}]
+let _layerIdSeq = 0;
+const imgLayersHost = document.getElementById('imgLayersHost');
+const addLayerBtn = document.getElementById('addLayerBtn');
+const layerImgUpload = document.getElementById('layerImgUpload');
+const layerListEl = document.getElementById('layerList');
+const exportMergedPngBtn = document.getElementById('exportMergedPng');
+const exportMergedSvgBtn = document.getElementById('exportMergedSvg');
+
 function cloneCells(cellsArray){
   return cellsArray.map(cell => {
     if(!cell) return null;
@@ -89,6 +99,8 @@ function init(){
   attachEvents();
   renderDraftList();
   updateDraftStatus(getDraftCount() ? `${getDraftCount()} drafts saved` : 'No drafts saved');
+  attachLayerEvents();
+  renderLayerPanel();
 }
 
   function attachPaletteDragEvents(){
@@ -427,7 +439,7 @@ function init(){
     bg.setAttribute('y', 0);
     bg.setAttribute('width', size);
     bg.setAttribute('height', size);
-    bg.setAttribute('fill', '#fcfcfc');
+    bg.setAttribute('fill', imageLayers.some(l=>l.visible) ? 'transparent' : '#fcfcfc');
     svg.appendChild(bg);
     const gridStroke = document.createElementNS(svg.namespaceURI, 'g');
     gridStroke.setAttribute('stroke', 'rgba(0,0,0,0.06)');
@@ -978,4 +990,341 @@ function applyInspectorLive(){
 // prevent context menu on svg to allow right-click erase
 svg.addEventListener('contextmenu', e=>e.preventDefault());
 
+// ─── Image Layer functions ─────────────────────────────────────────────────
+
+function attachLayerEvents(){
+  addLayerBtn.addEventListener('click', ()=> layerImgUpload.click());
+  layerImgUpload.addEventListener('change', (e)=>{
+    const files = Array.from(e.target.files || []);
+    files.forEach(f => loadImageLayerFile(f));
+    e.target.value = '';
+  });
+  if(exportMergedPngBtn) exportMergedPngBtn.addEventListener('click', exportMergedPNG);
+  if(exportMergedSvgBtn) exportMergedSvgBtn.addEventListener('click', exportMergedSVG);
+}
+
+function loadImageLayerFile(file){
+  const reader = new FileReader();
+  reader.onload = (e)=>{
+    const id = ++_layerIdSeq;
+    imageLayers.push({
+      id,
+      name: file.name.replace(/\.[^.]+$/, ''),
+      src: e.target.result,
+      opacity: 1, visible: true,
+      offsetX: 0, offsetY: 0, scale: 1
+    });
+    renderLayerImages();
+    renderLayerPanel();
+  };
+  reader.readAsDataURL(file);
+}
+
+function renderLayerImages(){
+  imgLayersHost.innerHTML = '';
+  const hasVisible = imageLayers.some(l => l.visible);
+  // fix SVG background rect immediately without full re-render
+  const bgRect = svg.querySelector('rect');
+  if(bgRect) bgRect.setAttribute('fill', hasVisible ? 'transparent' : '#fcfcfc');
+
+  imageLayers.filter(l => l.visible).forEach(layer => {
+    const img = document.createElement('img');
+    img.src = layer.src;
+    img.className = 'layer-img';
+    img.style.opacity = layer.opacity;
+    img.style.transformOrigin = 'center center';
+    img.style.transform = `translate(${layer.offsetX}%, ${layer.offsetY}%) scale(${layer.scale})`;
+    imgLayersHost.appendChild(img);
+  });
+}
+
+function renderLayerPanel(){
+  layerListEl.innerHTML = '';
+  // Dotty row (top, non-deletable)
+  const dottyRow = document.createElement('div');
+  dottyRow.className = 'layer-row dotty-row';
+  dottyRow.innerHTML = `<span style="font-size:11px;opacity:.6">▲</span><span class="layer-name">🖌 Dotty (top)</span>`;
+  layerListEl.appendChild(dottyRow);
+
+  // Image layers (bottom-to-top, so last = closest to dotty)
+  for(let i = imageLayers.length - 1; i >= 0; i--){
+    const layer = imageLayers[i];
+    const row = document.createElement('div');
+    row.className = 'layer-row';
+    row.dataset.id = layer.id;
+
+    const visCheck = document.createElement('input');
+    visCheck.type = 'checkbox';
+    visCheck.checked = layer.visible;
+    visCheck.title = 'Visible';
+    visCheck.addEventListener('change', ()=>{
+      layer.visible = visCheck.checked;
+      renderLayerImages();
+    });
+
+    const nameSpan = document.createElement('span');
+    nameSpan.className = 'layer-name';
+    nameSpan.textContent = layer.name;
+    nameSpan.title = layer.name;
+
+    const opSlider = document.createElement('input');
+    opSlider.type = 'range';
+    opSlider.min = 0; opSlider.max = 1; opSlider.step = 0.05;
+    opSlider.value = layer.opacity;
+    opSlider.title = 'Opacity';
+    opSlider.style.width = '60px';
+    opSlider.addEventListener('input', ()=>{
+      layer.opacity = parseFloat(opSlider.value);
+      renderLayerImages();
+    });
+
+    const upBtn = document.createElement('button');
+    upBtn.textContent = '↑'; upBtn.title = 'Move up';
+    upBtn.addEventListener('click', ()=>{ moveImageLayer(layer.id, 1); });
+
+    const downBtn = document.createElement('button');
+    downBtn.textContent = '↓'; downBtn.title = 'Move down';
+    downBtn.addEventListener('click', ()=>{ moveImageLayer(layer.id, -1); });
+
+    const delBtn = document.createElement('button');
+    delBtn.textContent = '✕'; delBtn.title = 'Delete layer';
+    delBtn.style.color = '#e05';
+    delBtn.addEventListener('click', ()=>{
+      imageLayers = imageLayers.filter(l => l.id !== layer.id);
+      renderLayerImages();
+      renderLayerPanel();
+    });
+
+    // expand toggle for transform controls
+    const tfgBtn = document.createElement('button');
+    tfgBtn.textContent = '⊞'; tfgBtn.title = 'Transform';
+    tfgBtn.style.fontWeight = '600';
+
+    // extract dominant colors from this layer
+    const extractBtn = document.createElement('button');
+    extractBtn.textContent = '🎨'; extractBtn.title = 'Extract colors to palette';
+    extractBtn.addEventListener('click', ()=> extractLayerColors(layer));
+
+    row.appendChild(visCheck);
+    row.appendChild(nameSpan);
+    row.appendChild(opSlider);
+    row.appendChild(extractBtn);
+    row.appendChild(tfgBtn);
+    row.appendChild(upBtn);
+    row.appendChild(downBtn);
+    row.appendChild(delBtn);
+    layerListEl.appendChild(row);
+
+    // Transform sub-row (hidden by default)
+    const tfRow = document.createElement('div');
+    tfRow.className = 'layer-transform-row';
+    tfRow.style.display = 'none';
+
+    function makeSlider(labelText, min, max, step, val, onInput){
+      const wrap = document.createElement('label');
+      wrap.className = 'layer-tf-label';
+      const txt = document.createElement('span');
+      txt.textContent = labelText;
+      const sl = document.createElement('input');
+      sl.type = 'range'; sl.min = min; sl.max = max; sl.step = step; sl.value = val;
+      const badge = document.createElement('span');
+      badge.className = 'layer-tf-badge';
+      badge.textContent = val;
+      sl.addEventListener('input', ()=>{
+        badge.textContent = sl.value;
+        onInput(parseFloat(sl.value));
+      });
+      wrap.appendChild(txt); wrap.appendChild(sl); wrap.appendChild(badge);
+      return wrap;
+    }
+
+    tfRow.appendChild(makeSlider('X offset %', -100, 100, 1, layer.offsetX, v=>{ layer.offsetX=v; renderLayerImages(); }));
+    tfRow.appendChild(makeSlider('Y offset %', -100, 100, 1, layer.offsetY, v=>{ layer.offsetY=v; renderLayerImages(); }));
+    tfRow.appendChild(makeSlider('Scale', 0.1, 4, 0.05, layer.scale, v=>{ layer.scale=v; renderLayerImages(); }));
+
+    const resetTfBtn = document.createElement('button');
+    resetTfBtn.textContent = 'Reset transform';
+    resetTfBtn.style.marginTop = '4px';
+    resetTfBtn.addEventListener('click', ()=>{
+      layer.offsetX = 0; layer.offsetY = 0; layer.scale = 1;
+      tfRow.innerHTML = ''; // re-create sliders with reset values
+      tfRow.appendChild(makeSlider('X offset %', -100, 100, 1, 0, v=>{ layer.offsetX=v; renderLayerImages(); }));
+      tfRow.appendChild(makeSlider('Y offset %', -100, 100, 1, 0, v=>{ layer.offsetY=v; renderLayerImages(); }));
+      tfRow.appendChild(makeSlider('Scale', 0.1, 4, 0.05, 1, v=>{ layer.scale=v; renderLayerImages(); }));
+      tfRow.appendChild(resetTfBtn);
+      renderLayerImages();
+    });
+    tfRow.appendChild(resetTfBtn);
+
+    tfgBtn.addEventListener('click', ()=>{
+      const open = tfRow.style.display !== 'none';
+      tfRow.style.display = open ? 'none' : 'flex';
+      tfgBtn.style.background = open ? '' : 'rgba(99,102,241,0.18)';
+    });
+
+    layerListEl.appendChild(tfRow);
+  }
+}
+
+// ─── Color extraction from image layer ──────────────────────────────────
+
+function extractLayerColors(layer, numColors = 12){
+  const img = new Image();
+  img.onload = ()=>{
+    const size = 100; // sample at 100×100 resolution
+    const canvas = document.createElement('canvas');
+    canvas.width = size; canvas.height = size;
+    const ctx = canvas.getContext('2d');
+    ctx.drawImage(img, 0, 0, size, size);
+    const data = ctx.getImageData(0, 0, size, size).data;
+
+    // build color frequency map with quantization (round to nearest 16)
+    const freq = {};
+    const step = 4; // sample every 4th pixel for speed
+    for(let i = 0; i < data.length; i += 4 * step){
+      const a = data[i + 3];
+      if(a < 20) continue; // skip transparent
+      const r = Math.round(data[i]   / 16) * 16;
+      const g = Math.round(data[i+1] / 16) * 16;
+      const b = Math.round(data[i+2] / 16) * 16;
+      const key = (r << 16) | (g << 8) | b;
+      freq[key] = (freq[key] || 0) + 1;
+    }
+
+    // sort by frequency, pick top candidates, then filter by perceptual distance
+    const sorted = Object.entries(freq)
+      .sort((a, b) => b[1] - a[1])
+      .map(([k]) => {
+        const n = parseInt(k);
+        return { r: (n >> 16) & 0xff, g: (n >> 8) & 0xff, b: n & 0xff };
+      });
+
+    function colorDist(a, b){
+      return Math.sqrt((a.r-b.r)**2 + (a.g-b.g)**2 + (a.b-b.b)**2);
+    }
+    function toHex({r, g, b}){
+      return '#' + [r,g,b].map(v => v.toString(16).padStart(2,'0')).join('');
+    }
+
+    const picked = [];
+    const minDist = 40; // minimum perceptual distance between colors
+    for(const col of sorted){
+      if(picked.length >= numColors) break;
+      if(picked.every(p => colorDist(p, col) >= minDist)){
+        picked.push(col);
+      }
+    }
+
+    const hexColors = picked.map(toHex);
+    // add only colors not already in palette
+    let added = 0;
+    hexColors.forEach(hex => {
+      if(!palette.includes(hex)){ palette.push(hex); added++; }
+    });
+    setupPalette();
+    updateDraftStatus(`Extracted ${added} color${added!==1?'s':''} from "${layer.name}"`);
+  };
+  img.src = layer.src;
+}
+
+function moveImageLayer(id, dir){  const idx = imageLayers.findIndex(l => l.id === id);
+  if(idx < 0) return;
+  const newIdx = idx + dir;
+  if(newIdx < 0 || newIdx >= imageLayers.length) return;
+  const tmp = imageLayers[idx];
+  imageLayers[idx] = imageLayers[newIdx];
+  imageLayers[newIdx] = tmp;
+  renderLayerImages();
+  renderLayerPanel();
+}
+
+// ─── Merged export ────────────────────────────────────────────────────────
+
+function exportMergedPNG(){
+  const w = parseInt(exportSizeInput.value, 10) || 2048;
+  const canvas = document.createElement('canvas');
+  canvas.width = w; canvas.height = w;
+  const ctx = canvas.getContext('2d');
+  ctx.clearRect(0, 0, w, w);
+
+  const visibleLayers = imageLayers.filter(l => l.visible);
+
+  function drawLayerAt(idx){
+    if(idx >= visibleLayers.length){
+      // draw dotty SVG on top
+      const svgStr = getExportSvgString(true);
+      const blob = new Blob([svgStr], {type:'image/svg+xml;charset=utf-8'});
+      const url = URL.createObjectURL(blob);
+      const img = new Image();
+      img.onload = ()=>{
+        ctx.drawImage(img, 0, 0, w, w);
+        URL.revokeObjectURL(url);
+        const png = canvas.toDataURL('image/png');
+        const a = document.createElement('a'); a.href = png; a.download = 'dotty-merged.png'; a.click();
+      };
+      img.src = url;
+      return;
+    }
+    const layer = visibleLayers[idx];
+    const img = new Image();
+    img.onload = ()=>{
+      ctx.save();
+      ctx.globalAlpha = layer.opacity;
+      // pivot = center, offsetX/Y in % of w
+      const cx = w / 2 + (layer.offsetX / 100) * w;
+      const cy = w / 2 + (layer.offsetY / 100) * w;
+      ctx.translate(cx, cy);
+      ctx.scale(layer.scale, layer.scale);
+      ctx.drawImage(img, -w / 2, -w / 2, w, w);
+      ctx.restore();
+      drawLayerAt(idx + 1);
+    };
+    img.src = layer.src;
+  }
+  drawLayerAt(0);
+}
+
+function exportMergedSVG(){
+  const sizePx = parseInt(exportSizeInput.value, 10) || 2048;
+  const ns = 'http://www.w3.org/2000/svg';
+  const xlinkNs = 'http://www.w3.org/1999/xlink';
+  const root = document.createElementNS(ns, 'svg');
+  root.setAttribute('xmlns', ns);
+  root.setAttribute('xmlns:xlink', xlinkNs);
+  root.setAttribute('width', sizePx);
+  root.setAttribute('height', sizePx);
+  root.setAttribute('viewBox', '0 0 800 800');
+  root.setAttribute('overflow', 'hidden');
+  imageLayers.filter(l => l.visible).forEach(layer => {
+    const imgEl = document.createElementNS(ns, 'image');
+    imgEl.setAttribute('x', -400); imgEl.setAttribute('y', -400);
+    imgEl.setAttribute('width', 800); imgEl.setAttribute('height', 800);
+    imgEl.setAttribute('preserveAspectRatio', 'none');
+    imgEl.setAttribute('opacity', layer.opacity);
+    // pivot = 400,400 (center of 800×800), then apply offsetX/Y in px (1% = 8px)
+    const tx = 400 + (layer.offsetX / 100) * 800;
+    const ty = 400 + (layer.offsetY / 100) * 800;
+    imgEl.setAttribute('transform', `translate(${tx},${ty}) scale(${layer.scale})`);
+    imgEl.setAttributeNS(xlinkNs, 'xlink:href', layer.src);
+    imgEl.setAttribute('href', layer.src);
+    root.appendChild(imgEl);
+  });
+
+  // dotty content (no background, no grid)
+  const dotClone = svg.cloneNode(true);
+  const bgRect = dotClone.querySelector('rect');
+  if(bgRect) bgRect.remove();
+  const gridG = dotClone.querySelector('g');
+  if(gridG) gridG.remove();
+  Array.from(dotClone.childNodes).forEach(n => root.appendChild(n.cloneNode(true)));
+
+  const serializer = new XMLSerializer();
+  const str = serializer.serializeToString(root);
+  const blob = new Blob([str], {type:'image/svg+xml;charset=utf-8'});
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a'); a.href = url; a.download = 'dotty-merged.svg'; a.click();
+  URL.revokeObjectURL(url);
+}
+
 init();
+

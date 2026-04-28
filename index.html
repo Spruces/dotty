@@ -10,87 +10,122 @@
   <div class="app">
     <aside class="controls">
       <h1>Dotty</h1>
-      <div class="section">
-        <label>Grid Size: <input id="gridSize" type="number" min="8" max="128" value="32"></label>
-        <label>Dot Size: <input id="dotSize" type="range" min="2" max="40" value="16"> <span id="dotSizeVal">16</span></label>
-        <label>Dot Fill (%): <input id="fillFactor" type="range" min="20" max="120" value="75"> <span id="fillFactorVal">75</span></label>
-      </div>
-      <div class="section">
-        <label>Palette:</label>
-        <div class="palette-controls">
-          <input id="addHex" placeholder="#rrggbb" style="width:100px;padding:6px;border-radius:6px;border:1px solid rgba(0,0,0,0.06)" />
-          <button id="addColor">Add</button>
-          <button id="exportPalette">Export Palette</button>
-          <input id="importPalette" type="file" accept="application/json" style="display:none">
-          <button id="importPaletteBtn">Import Palette</button>
-          <input id="imgUpload" type="file" accept="image/*" style="display:none">
-          <button id="uploadBtn">Upload Image</button>
-          <button id="eyedropBtn">Eyedropper (Image/SVG)</button>
-        </div>
-        <div id="palette" class="palette" aria-label="palette"></div>
-        <div id="paletteTrash" class="palette-trash" title="Drag here to delete color">🗑️</div>
-        <div id="imgPreviewWrap" class="img-preview-wrap" style="display:none">
-          <img id="sourceImage" alt="source" />
-          <small>Click image to pick color</small>
-        </div>
-      </div>
-      <div class="section" id="inspector" style="display:none">
-        <label>Selected Color: <span id="selColorPreview" class="color-swatch"></span></label>
-        <label>Dot Brightness: <input id="dotBrightness" type="range" min="0" max="200" value="100"> <span id="dotBrightnessVal">100</span></label>
-        <label>Dot Fill (%): <input id="dotFill" type="range" min="20" max="120" value="75"> <span id="dotFillVal">75</span></label>
-        <div id="quadControls" style="display:none;margin-top:8px">
-          <div>Quadrants (click to select):</div>
-          <div style="display:flex;gap:6px;margin-top:6px">
-            <button id="q0" class="quad-swatch">NW</button>
-            <button id="q1" class="quad-swatch">NE</button>
-            <button id="q2" class="quad-swatch">SW</button>
-            <button id="q3" class="quad-swatch">SE</button>
-          </div>
-        </div>
-        <div class="section buttons">
-          <button id="applyDot">Close</button>
-          <button id="resetDot">Reset</button>
-          <button id="deleteDot">Delete</button>
-        </div>
-        <small>Alt+click a dot to edit its properties (or click empty cell then Apply to create).</small>
-      </div>
-      <div class="section">
-        <label><input id="diagSplit" type="checkbox"> Split cells diagonally (X)</label>
-      </div>
-      <div class="section">
-        <label>Brightness: <input id="brightness" type="range" min="0" max="200" value="100"> <span id="brightnessVal">100</span></label>
-      </div>
-      <div class="section buttons">
-        <label>Dot Shape:
+
+      <!-- ① Canvas -->
+      <div class="panel-section">
+        <div class="panel-section-title">Canvas</div>
+        <label>Grid Size <input id="gridSize" type="number" min="8" max="256" value="256"></label>
+        <label>Dot Size <input id="dotSize" type="range" min="2" max="40" value="16"> <span id="dotSizeVal" class="value-badge">16</span></label>
+        <label>Dot Fill % <input id="fillFactor" type="range" min="20" max="120" value="75"> <span id="fillFactorVal" class="value-badge">75</span></label>
+        <label>Shape
           <select id="dotShape">
             <option value="circle">Circle</option>
             <option value="square">Square</option>
             <option value="radial">Radial</option>
           </select>
         </label>
-        <label>Export Size: <input id="exportSize" type="number" min="256" max="8192" value="2048"></label>
+        <label><input id="diagSplit" type="checkbox"> Split cells diagonally (X)</label>
       </div>
-      <div class="section">
-        <label>Draft Name: <input id="draftName" type="text" placeholder="My draft"></label>
-        <div class="section buttons" style="align-items:center;gap:8px;flex-wrap:wrap;">
-          <button id="saveDraftBtn">Save Draft</button>
-          <button id="loadDraftBtn">Load Selected</button>
-          <button id="deleteDraftBtn">Delete Selected</button>
-          <button id="loadSampleBtn">Load Sample 128×128</button>
+
+      <!-- ② Palette -->
+      <div class="panel-section">
+        <div class="panel-section-title">Palette</div>
+        <div class="palette-controls">
+          <input id="addHex" placeholder="#rrggbb" style="width:90px;padding:5px 7px;border-radius:6px;border:1px solid rgba(0,0,0,0.1)" />
+          <button id="addColor">+ Add</button>
+          <button id="exportPalette">Export</button>
+          <input id="importPalette" type="file" accept="application/json" style="display:none">
+          <button id="importPaletteBtn">Import</button>
         </div>
-        <label>Saved Drafts:</label>
-        <select id="draftList" style="width:100%;padding:8px;border-radius:6px;border:1px solid rgba(0,0,0,0.12);background:#fff;color:#111"></select>
+        <div id="palette" class="palette" aria-label="palette"></div>
+        <div id="paletteTrash" class="palette-trash" title="Drag here to delete color">🗑️</div>
+        <div class="palette-controls" style="margin-top:8px">
+          <input id="imgUpload" type="file" accept="image/*" style="display:none">
+          <button id="uploadBtn">📷 Color from Image</button>
+          <button id="eyedropBtn">🔍 Eyedropper</button>
+        </div>
+        <div id="imgPreviewWrap" class="img-preview-wrap" style="display:none">
+          <img id="sourceImage" alt="source" />
+          <small>Click image to pick color</small>
+        </div>
       </div>
-      <div class="section buttons">
-        <button id="clearBtn">Clear</button>
-        <button id="exportSvg">Export SVG</button>
-        <button id="exportPng">Export PNG</button>
+
+      <!-- ③ Dot Inspector (hidden until alt+click) -->
+      <div class="panel-section" id="inspector" style="display:none">
+        <div class="panel-section-title">Dot Inspector</div>
+        <label>Color <span id="selColorPreview" class="color-swatch"></span></label>
+        <label>Brightness <input id="dotBrightness" type="range" min="0" max="200" value="100"> <span id="dotBrightnessVal" class="value-badge">100</span></label>
+        <label>Fill % <input id="dotFill" type="range" min="20" max="120" value="75"> <span id="dotFillVal" class="value-badge">75</span></label>
+        <div id="quadControls" style="display:none;margin-top:8px">
+          <div style="font-size:12px;color:#888;margin-bottom:6px">Quadrants</div>
+          <div style="display:flex;gap:6px">
+            <button id="q0" class="quad-swatch">NW</button>
+            <button id="q1" class="quad-swatch">NE</button>
+            <button id="q2" class="quad-swatch">SW</button>
+            <button id="q3" class="quad-swatch">SE</button>
+          </div>
+        </div>
+        <div class="btn-row" style="margin-top:10px">
+          <button id="applyDot">Close</button>
+          <button id="resetDot">Reset</button>
+          <button id="deleteDot" style="color:#e05">Delete</button>
+        </div>
+        <small>Alt+click a dot to edit. Click empty cell → Close to create.</small>
       </div>
-      <small id="draftStatus" class="draft-status">Draft not saved</small>
-      <small>Click grid to paint; right-click to erase.</small>
+
+      <!-- ④ Appearance -->
+      <div class="panel-section">
+        <div class="panel-section-title">Appearance</div>
+        <label>Global Brightness <input id="brightness" type="range" min="0" max="200" value="100"> <span id="brightnessVal" class="value-badge">100</span></label>
+      </div>
+
+      <!-- ⑤ Layers -->
+      <div class="panel-section" id="layerSection">
+        <div class="panel-section-title" style="display:flex;align-items:center;justify-content:space-between">
+          <span>Layers</span>
+          <button id="addLayerBtn" class="layer-add-btn">+ Add Image</button>
+          <input id="layerImgUpload" type="file" accept="image/*" multiple style="display:none">
+        </div>
+        <div id="layerList" class="layer-list"></div>
+      </div>
+
+      <!-- ⑥ Drafts -->
+      <div class="panel-section">
+        <div class="panel-section-title">Drafts</div>
+        <label>Name <input id="draftName" type="text" placeholder="My draft" style="flex:1"></label>
+        <div class="btn-row">
+          <button id="saveDraftBtn">Save</button>
+          <button id="loadDraftBtn">Load</button>
+          <button id="deleteDraftBtn" style="color:#e05">Delete</button>
+          <button id="loadSampleBtn">Sample</button>
+        </div>
+        <select id="draftList" style="width:100%;padding:7px 8px;border-radius:6px;border:1px solid rgba(0,0,0,0.12);background:#fff;color:#111;margin-top:6px"></select>
+        <small id="draftStatus" class="draft-status">Draft not saved</small>
+      </div>
+
+      <!-- ⑦ Export -->
+      <div class="panel-section">
+        <div class="panel-section-title">Export</div>
+        <label>Output Size (px) <input id="exportSize" type="number" min="256" max="8192" value="2048"></label>
+        <div class="btn-row">
+          <button id="exportSvg">SVG</button>
+          <button id="exportPng">PNG</button>
+          <button id="exportMergedPng">Merged PNG</button>
+          <button id="exportMergedSvg">Merged SVG</button>
+        </div>
+        <div class="btn-row" style="margin-top:6px">
+          <button id="clearBtn" style="color:#e05">🗑 Clear Canvas</button>
+        </div>
+        <small>SVG/PNG = Dotty only (transparent). Merged = all visible layers + Dotty.</small>
+        <small>Click to paint · Right-click to erase · Shift+drag to fill rect · Ctrl+Z to undo</small>
+      </div>
+
     </aside>
     <main class="canvas-wrap">
-      <svg id="gridSvg" xmlns="http://www.w3.org/2000/svg"></svg>
+      <div id="layerStack" class="layer-stack">
+        <div id="imgLayersHost"></div>
+        <svg id="gridSvg" xmlns="http://www.w3.org/2000/svg"></svg>
+      </div>
     </main>
   </div>
   <script src="app.js"></script>
